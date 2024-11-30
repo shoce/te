@@ -2,6 +2,8 @@
 history:
 2020/04/17 v1
 
+https://pkg.go.dev/text/template
+
 GoFmt GoBuildNull GoBuild
 */
 
@@ -17,6 +19,103 @@ import (
 	"text/template"
 	"time"
 )
+
+var (
+	te   *template.Template
+	tefm template.FuncMap
+)
+
+func init() {
+	tefm = template.FuncMap{
+		"Files":       Files,
+		"Dirs":        Dirs,
+		"FilesDirs":   FilesDirs,
+		"DirsFiles":   DirsFiles,
+		"DirName":     DirName,
+		"ReadFile":    ReadFile,
+		"UserHomeDir": os.UserHomeDir,
+		"HasPrefix":   strings.HasPrefix,
+		"HasSuffix":   strings.HasSuffix,
+		"TrimPrefix":  strings.TrimPrefix,
+		"TrimSuffix":  strings.TrimSuffix,
+		"TrimSpace":   strings.TrimSpace,
+		"Contains":    strings.Contains,
+		"Join":        strings.Join,
+		"Split":       strings.Split,
+		"Index":       Index,
+		"Append":      Append,
+		"MapNew":      MapNew,
+		"MapAppend":   MapAppend,
+	}
+
+	te = template.New("te")
+	te = te.Funcs(tefm)
+}
+
+func main() {
+	var err error
+	var inbb, outbb []byte
+	var in string
+	var inpath, outpath string
+
+	if len(os.Args) > 1 {
+		inpath = os.Args[1]
+	}
+	if len(os.Args) > 2 {
+		outpath = os.Args[2]
+	}
+
+	if inpath != "" {
+		inbb, err = ioutil.ReadFile(inpath)
+		if err != nil {
+			log("read %s: %s", inpath, err)
+			os.Exit(1)
+		}
+	} else {
+		inbb, err = ioutil.ReadAll(os.Stdin)
+		if err != nil {
+			log("read stdin: %s", err)
+			os.Exit(1)
+		}
+	}
+	in = string(inbb)
+
+	te, err = te.Parse(in)
+	if err != nil {
+		log("parse: %s", err)
+		os.Exit(1)
+	}
+
+	if outpath != "" {
+		bb := bytes.NewBuffer(nil)
+		err = te.Execute(bb, nil)
+		if err != nil {
+			log("execute: %s", err)
+			os.Exit(1)
+		}
+
+		outbb, err = ioutil.ReadFile(outpath)
+		if err == nil {
+			if bytes.Equal(bb.Bytes(), outbb) {
+				//log("same output as %s, not writing", outpath)
+				os.Exit(0)
+			}
+		}
+
+		err = ioutil.WriteFile(outpath, bb.Bytes(), 0644)
+		if err != nil {
+			log("write %s: %s", outpath, err)
+			os.Exit(1)
+		}
+		log("wrote %d bytes to %s", len(bb.Bytes()), outpath)
+	} else {
+		err = te.Execute(os.Stdout, nil)
+		if err != nil {
+			log("execute: %s", err)
+			os.Exit(1)
+		}
+	}
+}
 
 func log(msg string, args ...interface{}) {
 	ts := time.Now().Local().Format("Jan/02;15:04")
@@ -126,92 +225,32 @@ func ReadFile(fp string) (string, error) {
 	return string(bb), nil
 }
 
-var (
-	te   *template.Template
-	tefm template.FuncMap
-)
-
-func init() {
-	tefm = template.FuncMap{
-		"Files":       Files,
-		"Dirs":        Dirs,
-		"FilesDirs":   FilesDirs,
-		"DirsFiles":   DirsFiles,
-		"DirName":     DirName,
-		"ReadFile":    ReadFile,
-		"UserHomeDir": os.UserHomeDir,
-		"HasPrefix":   strings.HasPrefix,
-		"HasSuffix":   strings.HasSuffix,
-		"TrimPrefix":  strings.TrimPrefix,
-		"TrimSuffix":  strings.TrimSuffix,
-		"TrimSpace":   strings.TrimSpace,
+func Index(a []string, i int) (string, error) {
+	if i == 0 {
+		return "", fmt.Errorf("index 0 is invalid", i)
 	}
-
-	te = template.New("te")
-	te = te.Funcs(tefm)
+	if i > len(a) {
+		return "", fmt.Errorf("index %d is out of range, length is %d", i, len(a))
+	}
+	if i < 0 {
+		return a[len(a)+i], nil
+	}
+	return a[i-1], nil
 }
 
-func main() {
-	var err error
-	var inbb, outbb []byte
-	var in string
-	var inpath, outpath string
+func Append(a []string, b string) ([]string, error) {
+	return append(a, b), nil
+}
 
-	if len(os.Args) > 1 {
-		inpath = os.Args[1]
+func MapNew() (map[string][]string, error) {
+	m := make(map[string][]string)
+	return m, nil
+}
+
+func MapAppend(m map[string][]string, a, b string) (map[string][]string, error) {
+	if _, ok := m[a]; !ok {
+		m[a] = []string{}
 	}
-	if len(os.Args) > 2 {
-		outpath = os.Args[2]
-	}
-
-	if inpath != "" {
-		inbb, err = ioutil.ReadFile(inpath)
-		if err != nil {
-			log("read %s: %s", inpath, err)
-			os.Exit(1)
-		}
-	} else {
-		inbb, err = ioutil.ReadAll(os.Stdin)
-		if err != nil {
-			log("read stdin: %s", err)
-			os.Exit(1)
-		}
-	}
-	in = string(inbb)
-
-	te, err = te.Parse(in)
-	if err != nil {
-		log("parse: %s", err)
-		os.Exit(1)
-	}
-
-	if outpath != "" {
-		bb := bytes.NewBuffer(nil)
-		err = te.Execute(bb, nil)
-		if err != nil {
-			log("execute: %s", err)
-			os.Exit(1)
-		}
-
-		outbb, err = ioutil.ReadFile(outpath)
-		if err == nil {
-			if bytes.Equal(bb.Bytes(), outbb) {
-				//log("same output as %s, not writing", outpath)
-				os.Exit(0)
-			}
-		}
-
-		err = ioutil.WriteFile(outpath, bb.Bytes(), 0644)
-		if err != nil {
-			log("write %s: %s", outpath, err)
-			os.Exit(1)
-		}
-		log("wrote %d bytes to %s", len(bb.Bytes()), outpath)
-	} else {
-		err = te.Execute(os.Stdout, nil)
-		if err != nil {
-			log("execute: %s", err)
-			os.Exit(1)
-		}
-	}
+	m[a] = append(m[a], b)
+	return m, nil
 }
