@@ -4,7 +4,12 @@ history:
 
 https://pkg.go.dev/text/template
 
-GoFmt GoBuildNull GoBuild
+go get -u -v
+go mod tidy
+
+GoFmt
+GoBuildNull
+GoBuild
 */
 
 package main
